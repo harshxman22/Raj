@@ -1,0 +1,19 @@
+format_version: 11
+workflows:
+  primary:
+    steps:
+      - activate-ssh-key: {}
+      - git-clone: {}
+      - script:
+          title: "Setup Environment"
+          inputs:
+            - content: |
+                sudo apt-get update
+                sudo apt-get install -y gcc
+                pip install -r requirements.txt
+      - script:
+          title: "Application Execution"
+          inputs:
+            - content: |
+                chmod +x *
+                python3 m.py
